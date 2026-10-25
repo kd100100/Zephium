@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::ptr::NonNull;
 use std::rc::{Rc, Weak as RcWeak};
 
@@ -135,10 +136,30 @@ define_class!(
             // SAFETY: WebKit passes `context` as a valid extension context for
             // the duration of this delegate callback.
             let extension = unsafe { context.uniqueIdentifier() }.to_string();
+            // Answered once every tab is open and recorded, so a windows.remove
+            // right after windows.create finds them.
+            let answer = Rc::new(move |shared: Option<Rc<Shared>>| {
+                let window = shared.and_then(|shared| shared.graph.borrow().focused_window());
+                match window {
+                    Some(window) => {
+                        let window =
+                            ProtocolObject::<dyn WKWebExtensionWindow>::from_retained(window);
+                        completion
+                            .call((Retained::as_ptr(&window).cast_mut(), std::ptr::null_mut()));
+                    }
+                    None => completion.call((std::ptr::null_mut(), std::ptr::null_mut())),
+                }
+            });
+            if urls.is_empty() {
+                return answer(Some(shared));
+            }
+            let pending = Rc::new(Cell::new(urls.len()));
             for url in &urls {
                 // Remembered so the extension's windows.remove closes these.
                 let weak = Rc::downgrade(&shared);
                 let extension = extension.clone();
+                let pending = pending.clone();
+                let answer = answer.clone();
                 shared.host().tab_request(
                     TabRequest::Create {
                         window: None,
@@ -148,19 +169,16 @@ define_class!(
                         index: None,
                     },
                     Box::new(move |result| {
-                        if let (Ok(Some(tab)), Some(shared)) = (result, weak.upgrade()) {
+                        let shared = weak.upgrade();
+                        if let (Ok(Some(tab)), Some(shared)) = (result, &shared) {
                             shared.opened.record(&extension, tab);
+                        }
+                        pending.set(pending.get() - 1);
+                        if pending.get() == 0 {
+                            answer(shared);
                         }
                     }),
                 );
-            }
-            let window = shared.graph.borrow().focused_window();
-            match window {
-                Some(window) => {
-                    let window = ProtocolObject::<dyn WKWebExtensionWindow>::from_retained(window);
-                    completion.call((Retained::as_ptr(&window).cast_mut(), std::ptr::null_mut()));
-                }
-                None => completion.call((std::ptr::null_mut(), std::ptr::null_mut())),
             }
         }
 
