@@ -119,7 +119,7 @@ define_class!(
             &self,
             _controller: &WKWebExtensionController,
             configuration: &WKWebExtensionWindowConfiguration,
-            _context: &WKWebExtensionContext,
+            context: &WKWebExtensionContext,
             completion: &DynBlock<
                 dyn Fn(*mut ProtocolObject<dyn WKWebExtensionWindow>, *mut NSError),
             >,
@@ -132,7 +132,11 @@ define_class!(
                 .iter()
                 .filter_map(|url| url.absoluteString().map(|url| url.to_string()))
                 .collect();
+            let extension = unsafe { context.uniqueIdentifier() }.to_string();
             for url in &urls {
+                // Remembered so the extension's windows.remove closes these.
+                let weak = Rc::downgrade(&shared);
+                let extension = extension.clone();
                 shared.host().tab_request(
                     TabRequest::Create {
                         window: None,
@@ -141,7 +145,11 @@ define_class!(
                         pinned: false,
                         index: None,
                     },
-                    Box::new(|_| {}),
+                    Box::new(move |result| {
+                        if let (Ok(Some(tab)), Some(shared)) = (result, weak.upgrade()) {
+                            shared.opened.record(&extension, tab);
+                        }
+                    }),
                 );
             }
             let window = shared.graph.borrow().focused_window();
