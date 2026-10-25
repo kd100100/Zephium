@@ -79,6 +79,9 @@ fn native_web_extension_subframe_owns_policy(
 // `webExtensionController` exists from macOS 15.4 and iOS 18.4; earlier
 // systems have no extension controller.
 fn has_web_extension_controller(webview: &WKWebView) -> bool {
+  // SAFETY: `webview` is the live view WebKit is asking about, so its
+  // configuration is valid; the message is sent only after the selector is
+  // confirmed, and it returns a nullable retained object.
   unsafe {
     let configuration = webview.configuration();
     if !configuration.respondsToSelector(objc2::sel!(webExtensionController)) {
