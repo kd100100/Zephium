@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSPopoverBehavior, NSView};
-use objc2_foundation::{NSPoint, NSRect, NSRectEdge, NSSize, NSString, NSTimer};
+use objc2_foundation::{
+    NSPoint, NSRect, NSRectEdge, NSRunLoop, NSRunLoopCommonModes, NSSize, NSString, NSTimer,
+};
 use objc2_web_kit::{WKWebExtensionAction, WKWebView, WKWebViewConfiguration, WKWebsiteDataStore};
 use zephium_core::extensions::{
     ExtensionActionRejection, ExtensionActionRequest, ExtensionActionRevision,
@@ -1077,13 +1079,19 @@ impl LoadGate {
         std::mem::take(&mut self.held)
     }
 
-    /// How long `resume` waits, or `None` when nothing is loading or the
-    /// deadline has passed; a load that never settles cannot hold pages.
-    fn hold(&mut self, now: Instant, resume: &Resume) -> Option<Duration> {
+    /// How long a held navigation still waits, or `None` when nothing is
+    /// loading or the deadline has passed; a load that never settles cannot
+    /// hold pages.
+    fn remaining(&self, now: Instant) -> Option<Duration> {
         let deadline = self.deadline.filter(|_| self.loading > 0)?;
-        let wait = deadline
+        deadline
             .checked_duration_since(now)
-            .filter(|wait| !wait.is_zero())?;
+            .filter(|wait| !wait.is_zero())
+    }
+
+    /// How long `resume` waits, or `None` to proceed now.
+    fn hold(&mut self, now: Instant, resume: &Resume) -> Option<Duration> {
+        let wait = self.remaining(now)?;
         self.held.retain(|held| held.borrow().is_some());
         self.held.push(resume.clone());
         Some(wait)
@@ -1134,11 +1142,38 @@ pub(super) fn hold_navigation(profile: ProfileId, resume: Box<dyn FnOnce()>) -> 
     let Some(wait) = wait else {
         return false;
     };
-    let block = block2::RcBlock::new(move |_timer: NonNull<NSTimer>| release(&resume));
-    unsafe {
-        NSTimer::scheduledTimerWithTimeInterval_repeats_block(wait.as_secs_f64(), false, &block)
-    };
+    expire_after(profile, resume, wait);
     true
+}
+
+/// Releases `resume` at the gate's deadline. A load that began after the
+/// navigation was held moves that deadline, so the wait is renewed instead.
+fn expire_after(profile: ProfileId, resume: Resume, wait: Duration) {
+    let block = block2::RcBlock::new(move |_timer: NonNull<NSTimer>| {
+        if resume.borrow().is_none() {
+            return;
+        }
+        let remaining = LOAD_GATES.with(|gates| {
+            gates
+                .borrow()
+                .get(&profile)
+                .and_then(|gate| gate.remaining(Instant::now()))
+        });
+        match remaining {
+            Some(wait) => expire_after(profile, resume.clone(), wait),
+            None => release(&resume),
+        }
+    });
+    // Common modes, so a held page is still released during a modal sheet
+    // or a window drag.
+    unsafe {
+        let timer = NSTimer::scheduledTimerWithTimeInterval_repeats_block(
+            wait.as_secs_f64(),
+            false,
+            &block,
+        );
+        NSRunLoop::mainRunLoop().addTimer_forMode(&timer, NSRunLoopCommonModes);
+    }
 }
 
 /// The Shell replies to tabs.create before first navigation. Bind only at
@@ -2185,6 +2220,20 @@ mod tests {
             gate.hold(now + EXTENSION_LOAD_HOLD, &resume(&released)),
             None
         );
+    }
+
+    #[test]
+    fn a_later_load_keeps_a_held_navigation_past_the_first_deadline() {
+        let now = Instant::now();
+        let mut gate = LoadGate::default();
+        gate.started(now);
+        let held = resume(&Rc::new(Cell::new(0)));
+        assert_eq!(gate.hold(now, &held), Some(EXTENSION_LOAD_HOLD));
+        let second = Duration::from_millis(1000);
+        gate.started(now + second);
+        // At the first load's deadline the timer renews the wait.
+        assert_eq!(gate.remaining(now + EXTENSION_LOAD_HOLD), Some(second));
+        assert_eq!(gate.remaining(now + second + EXTENSION_LOAD_HOLD), None);
     }
 
     #[test]
