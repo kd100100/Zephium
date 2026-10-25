@@ -78,6 +78,16 @@ mod tests {
     }
 
     #[test]
+    fn a_tab_whose_close_failed_is_taken_again_next_time() {
+        let opened = Opened::default();
+        opened.record("a", 10);
+        assert_eq!(opened.take_in("a", 1, |_| Some(1)), [10]);
+        // The browser refused the close; the window's close records it again.
+        opened.record("a", 10);
+        assert_eq!(opened.take_in("a", 1, |_| Some(1)), [10]);
+    }
+
+    #[test]
     fn an_extension_that_opened_nothing_closes_nothing() {
         let opened = Opened::default();
         opened.record("a", 10);

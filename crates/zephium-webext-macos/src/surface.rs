@@ -413,6 +413,8 @@ define_class!(
                 completion.call((Retained::as_ptr(&error("The browser is closing.")).cast_mut(),));
                 return;
             };
+            // SAFETY: WebKit passes `context` as a valid extension context for
+            // the duration of this delegate callback.
             let extension = unsafe { context.uniqueIdentifier() }.to_string();
             let tabs = {
                 let graph = shared.graph.borrow();
@@ -434,10 +436,16 @@ define_class!(
                 let completion = completion.clone();
                 let remaining = remaining.clone();
                 let failure = failure.clone();
+                let weak = Rc::downgrade(&shared);
+                let extension = extension.clone();
                 shared.host().tab_request(
                     TabRequest::Close { tab },
                     Box::new(move |result| {
                         if let Err(message) = result {
+                            // Still open, so a later windows.remove can retry it.
+                            if let Some(shared) = weak.upgrade() {
+                                shared.opened.record(&extension, tab);
+                            }
                             failure.borrow_mut().get_or_insert(message);
                         }
                         remaining.set(remaining.get() - 1);

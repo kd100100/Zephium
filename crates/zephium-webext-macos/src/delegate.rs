@@ -132,6 +132,8 @@ define_class!(
                 .iter()
                 .filter_map(|url| url.absoluteString().map(|url| url.to_string()))
                 .collect();
+            // SAFETY: WebKit passes `context` as a valid extension context for
+            // the duration of this delegate callback.
             let extension = unsafe { context.uniqueIdentifier() }.to_string();
             for url in &urls {
                 // Remembered so the extension's windows.remove closes these.
