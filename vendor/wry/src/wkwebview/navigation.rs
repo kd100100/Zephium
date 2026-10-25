@@ -29,7 +29,9 @@ use super::class::wry_navigation_delegate::WryNavigationDelegate;
 
 const ACTIVE_APPLE_NAVIGATION_LIMIT: usize = 64;
 const APPLE_REDIRECT_EVENT_LIMIT: usize = 32;
-const WEB_EXTENSION_URL_PREFIX: &str = "webkit-extension://";
+// WebKit's default extension scheme, and the `chrome-extension` base URL the
+// embedder assigns each context so Chrome extensions see their usual origin.
+const WEB_EXTENSION_URL_PREFIXES: [&str; 2] = ["webkit-extension://", "chrome-extension://"];
 
 #[cfg(target_os = "macos")]
 fn extension_tab_trace_enabled() -> bool {
@@ -63,7 +65,10 @@ fn native_web_extension_subframe_owns_policy(
   url: &str,
   target_is_main_frame: Option<bool>,
 ) -> bool {
-  target_is_main_frame == Some(false) && url.starts_with(WEB_EXTENSION_URL_PREFIX)
+  target_is_main_frame == Some(false)
+    && WEB_EXTENSION_URL_PREFIXES
+      .iter()
+      .any(|prefix| url.starts_with(prefix))
 }
 
 /// URL attribution for WKNavigation's public delegate contract.
@@ -1004,6 +1009,20 @@ mod navigation_event_state_tests {
     ));
     assert!(!native_web_extension_subframe_owns_policy(
       "webkit-extensionx://abcdefghijklmnopabcdefghijklmnop/frame",
+      Some(false)
+    ));
+    let chrome = "chrome-extension://nngceckbapebfimnlniiiahkandclblb/overlay/menu-button.html";
+    assert!(native_web_extension_subframe_owns_policy(
+      chrome,
+      Some(false)
+    ));
+    assert!(!native_web_extension_subframe_owns_policy(
+      chrome,
+      Some(true)
+    ));
+    assert!(!native_web_extension_subframe_owns_policy(chrome, None));
+    assert!(!native_web_extension_subframe_owns_policy(
+      "chrome-extensionx://nngceckbapebfimnlniiiahkandclblb/frame",
       Some(false)
     ));
   }
