@@ -958,6 +958,32 @@ fn picture_in_picture_return_from_a_closed_tab_changes_nothing() {
     assert_eq!(*raises.lock().unwrap(), 0);
 }
 
+#[test]
+fn picture_in_picture_return_from_work_steps_back_to_browse_and_its_tab() {
+    let (mut shell, _, chrome, screen) = setup_with_async_chrome();
+    shell.handle(Command::Bootstrap);
+    let home = shell.windows.focused().unwrap().space;
+    let video = active_id(&screen);
+    navigate_and_commit(&mut shell, video, "https://video.example/watch");
+    let created = shell.handle_operation(Command::Space(Box::new(crate::SpaceCommand::Create {
+        name: "Studio".into(),
+        look: Default::default(),
+    })));
+    assert_ne!(created.outcome, OperationOutcome::Rejected);
+    shell.handle_operation(Command::ShowBrowserPage(Some(crate::BrowserPage::Work)));
+    assert_eq!(shell.active_browser_page(), Some(crate::BrowserPage::Work));
+
+    media_returns(&mut shell, video);
+    // Work would otherwise keep the tab off screen, and WebKit would keep
+    // the video in picture in picture.
+    assert!(shell.browser_return.is_some());
+    let (revision, _) = chrome.complete_browser_return(true);
+    shell.browser_chrome_restored(revision, true);
+    assert_eq!(shell.active_browser_page(), None);
+    assert_eq!(shell.windows.focused().unwrap().space, home);
+    assert_eq!(active_id(&screen), video);
+}
+
 fn focused_scope(shell: &Shell) -> (ProfileId, SpaceId) {
     let window = shell.windows.focused().unwrap();
     (window.profile, window.space)

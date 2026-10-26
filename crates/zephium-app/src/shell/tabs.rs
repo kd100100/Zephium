@@ -242,10 +242,20 @@ impl Shell {
     /// comes to the front, from another space if need be, and so does the
     /// window, as the picture-in-picture return button does in Safari.
     pub(super) fn return_to_media(&mut self, id: ItemId) {
-        let disposition = if self.item_in_focused_scope(id) {
-            self.operation_activate(id)
+        let focused = self.windows.focused().map(|window| window.profile);
+        if focused.is_none() || self.profile_of_item(id) != focused || self.items.tab(id).is_none()
+        {
+            return;
+        }
+        // WebKit takes the video back only once its page is on screen, so a
+        // browser page, Work included, steps back to browsing first.
+        let disposition = if self.active_browser_page().is_some() && !self.browser_return_ready {
+            self.browser_after_return = Some(Box::new(Command::Engine(
+                EngineEvent::MediaReturnRequested { id },
+            )));
+            self.operation_show_browser_page(None)
         } else {
-            self.switch_to_space_of(id)
+            self.show_media_tab(id)
         };
         if disposition.outcome != OperationOutcome::Rejected {
             (self.emit)(Projection::RaiseWindow);
