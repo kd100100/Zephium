@@ -255,6 +255,13 @@ export const commands = {
 	tabsOpen: () => __TAURI_INVOKE<OperationAdmission>("tabs_open"),
 	tabsActivate: (id: string) => __TAURI_INVOKE<OperationAdmission>("tabs_activate", { id }),
 	tabsClose: (id: string) => __TAURI_INVOKE<OperationAdmission>("tabs_close", { id }),
+	/**
+	 *  Gives an Essential a mark of its own in place of its site's icon, or takes
+	 *  it away with `None`. The shell refuses any tab that is not an Essential.
+	 */
+	tabsSetIcon: (id: string, icon:
+/**  An index into the frame's curated symbols. */
+{ kind: "symbol"; index: number } | { kind: "emoji"; text: string } | null) => __TAURI_INVOKE<OperationAdmission>("tabs_set_icon", { id, icon }),
 	tabsSetEssential: (id: string, essential: boolean, before: string | null) => __TAURI_INVOKE<OperationAdmission>("tabs_set_essential", { id, essential, before }),
 	/**
 	 *  Onboarding keeps a site by its catalog id; native owns the address and
@@ -2919,6 +2926,8 @@ export type TabMenuContext = {
 	page: boolean,
 	can_split: boolean,
 	essential: boolean,
+	/**  The Essential wears an icon the person chose. */
+	custom_icon: boolean,
 	/**  Other open tabs exist to close. */
 	others: boolean,
 	/**  Open tabs follow this one. */
@@ -2954,6 +2963,8 @@ export type TabView = {
 	can_go_back: boolean,
 	can_go_forward: boolean,
 	icon: IconRef | null,
+	/**  The mark the person gave an Essential, shown in place of `icon`. */
+	custom_icon?: SpaceIconView | null,
 	capture?: MediaCaptureView | null,
 };
 

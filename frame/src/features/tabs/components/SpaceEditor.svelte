@@ -9,7 +9,8 @@
   import Icon from "$shared/ui/Icon";
   import { onMount, untrack } from "svelte";
   import "./space-hue.css";
-  import { SPACE_COLORS, SPACE_SYMBOLS, emojiOf } from "../lib/space-look";
+  import { SPACE_COLORS } from "../lib/space-look";
+  import IconChoice from "./IconChoice.svelte";
 
   let {
     space,
@@ -38,7 +39,6 @@
   let icon = $state<SpaceIconView | null>(original.icon);
   let color = $state(original.color);
   let chosen = $state<SpaceThemeView | null>(original.theme);
-  let emoji = $state(original.icon?.kind === "emoji" ? original.icon.text : "");
   let failed = $state(false);
   let confirming = $state(false);
   let deleting = $state(false);
@@ -78,12 +78,6 @@
     clearTimeout(typing);
     // A name lands once typing pauses, so every key is not a write.
     typing = setTimeout(() => void commit(), 450);
-  }
-
-  function typeEmoji(text: string) {
-    emoji = text;
-    const found = emojiOf(text);
-    if (found) change(() => (icon = { kind: "emoji", text: found }));
   }
 
   function done(event?: SubmitEvent) {
@@ -194,44 +188,12 @@
         autocomplete="off"
       />
 
-      <div class="group" role="radiogroup" aria-labelledby="space-icon-label">
-        <div class="group-head">
-          <span id="space-icon-label">{m.space_icon()}</span>
-          <input
-            class="emoji-field"
-            value={emoji}
-            oninput={(event) => typeEmoji(event.currentTarget.value)}
-            onfocus={() => icon?.kind !== "emoji" && emojiOf(emoji) && typeEmoji(emoji)}
-            placeholder={m.space_emoji_short()}
-            aria-label={m.space_emoji_placeholder()}
-            data-on={icon?.kind === "emoji" || undefined}
-            maxlength={16}
-          />
-        </div>
-        <div class="symbols">
-          <button
-            type="button"
-            role="radio"
-            class="symbol symbol-none"
-            aria-checked={icon === null}
-            aria-label={m.space_icon_none()}
-            title={m.space_icon_none()}
-            onclick={() => change(() => (icon = null))}
-            ><Icon icon={UnavailableIcon} size={15} strokeWidth={1.6} /></button
-          >
-          {#each SPACE_SYMBOLS as symbol, index (index)}
-            <button
-              type="button"
-              role="radio"
-              class="symbol"
-              aria-checked={icon?.kind === "symbol" && icon.index === index}
-              aria-label={m.space_symbol({ index: String(index + 1) })}
-              onclick={() => change(() => (icon = { kind: "symbol", index }))}
-              ><Icon icon={symbol} size={15} strokeWidth={1.8} /></button
-            >
-          {/each}
-        </div>
-      </div>
+      <IconChoice
+        {icon}
+        label={m.space_icon()}
+        noneLabel={m.space_icon_none()}
+        onchange={(next) => change(() => (icon = next))}
+      />
 
       <div class="group" role="radiogroup" aria-labelledby="space-color-label">
         <div class="group-head"><span id="space-color-label">{m.space_color()}</span></div>
@@ -378,8 +340,7 @@
     box-shadow: var(--shadow-field-focus);
   }
 
-  .editor-name::placeholder,
-  .emoji-field::placeholder {
+  .editor-name::placeholder {
     color: var(--color-faint);
   }
 
@@ -409,69 +370,6 @@
     font-weight: 450;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .emoji-field {
-    width: 64px;
-    height: 20px;
-    padding-inline: 8px;
-    border: 0;
-    border-radius: var(--radius-capsule);
-    background: var(--row-hover);
-    color: var(--color-text);
-    font: inherit;
-    font-size: var(--text-label);
-    text-align: center;
-    outline: none;
-  }
-
-  .emoji-field:focus {
-    background: var(--row-active);
-  }
-
-  .emoji-field[data-on] {
-    background: var(--row-active);
-    box-shadow: inset 0 0 0 1px var(--space-hue);
-  }
-
-  .symbols {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(24px, 1fr));
-    gap: 1px;
-  }
-
-  .symbol {
-    display: grid;
-    height: 26px;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-inset);
-    background: transparent;
-    color: var(--color-muted);
-    place-items: center;
-    transition:
-      background-color var(--motion-instant) var(--ease-out),
-      color var(--motion-instant) var(--ease-out);
-  }
-
-  .symbol-none {
-    color: var(--color-faint);
-  }
-
-  .symbol:hover,
-  .symbol:focus-visible {
-    outline: none;
-    background: var(--row-hover);
-    color: var(--color-text);
-  }
-
-  .symbol[aria-checked="true"] {
-    background: var(--row-active);
-    color: var(--space-ink);
-  }
-
-  .symbol-none[aria-checked="true"] {
-    color: var(--color-text);
   }
 
   .colors {

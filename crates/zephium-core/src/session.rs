@@ -13,7 +13,7 @@ use crate::item::{
 use crate::items::Items;
 use crate::navigation;
 use crate::profiles::{Profile, ProfileKind, Profiles};
-use crate::spaces::{Space, SpaceLook, Spaces};
+use crate::spaces::{Space, SpaceIcon, SpaceLook, Spaces};
 use crate::split::Pane;
 
 pub const MAX_SESSION_PROFILES: usize = 64;
@@ -76,6 +76,9 @@ pub enum PersistedKind {
         /// Absent on legacy snapshots and for tabs never in front.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         last_active_ms: Option<u64>,
+        /// The mark an Essential shows in place of its site's icon.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        custom_icon: Option<SpaceIcon>,
     },
     /// Browser-owned pages have no navigable URL or native content view.
     BrowserTab {
@@ -216,6 +219,7 @@ fn collect(items: &Items, placement: Placement, out: &mut Vec<PersistedItem>) {
                         title: tab.title.clone(),
                         zoom: tab.zoom,
                         last_active_ms: tab.last_active_ms,
+                        custom_icon: tab.custom_icon.clone(),
                     },
                 },
             },
@@ -305,6 +309,7 @@ pub fn restore(state: SessionState) -> Restored {
                 title,
                 zoom,
                 last_active_ms,
+                custom_icon,
             } => {
                 let Ok(url) = Url::parse(&url) else {
                     continue;
@@ -322,6 +327,12 @@ pub fn restore(state: SessionState) -> Restored {
                 };
                 tab.last_active_ms =
                     last_active_ms.filter(|ms| (1_000..=MAX_EXACT_MS).contains(ms));
+                // Only a top-level Essential wears a mark of its own.
+                tab.custom_icon = custom_icon.filter(|icon| {
+                    icon.valid()
+                        && i.parent.is_none()
+                        && matches!(i.placement, Placement::Favorites { .. })
+                });
                 ItemKind::Tab(tab)
             }
             PersistedKind::BrowserTab { page } => {
@@ -757,6 +768,7 @@ mod tests {
                 title: "E".into(),
                 zoom: 1.0,
                 last_active_ms,
+                custom_icon: None,
             },
         };
         let state = SessionState {
@@ -797,6 +809,67 @@ mod tests {
     }
 
     #[test]
+    fn an_essentials_own_icon_survives_restore_and_nothing_else_wears_one() {
+        let profile = ProfileId::from(1);
+        let space = SpaceId::from(2);
+        let kept = Placement::Favorites { profile };
+        let tab = |id: u128, placement: Placement, custom_icon: Option<SpaceIcon>| PersistedItem {
+            id: ItemId::from(id),
+            parent: None,
+            placement,
+            kind: PersistedKind::Tab {
+                url: format!("https://mail.google.com/mail/u/{id}/"),
+                title: "Inbox".into(),
+                zoom: 1.0,
+                last_active_ms: None,
+                custom_icon,
+            },
+        };
+        let work = SpaceIcon::Emoji("💼".into());
+        let state = SessionState {
+            profiles: vec![PersistedProfile {
+                id: profile,
+                name: "P".into(),
+                kind: ProfileKind::Default,
+            }],
+            spaces: vec![PersistedSpace {
+                id: space,
+                profile,
+                name: "S".into(),
+                look: Default::default(),
+            }],
+            items: vec![
+                tab(10, kept, Some(work.clone())),
+                tab(11, kept, Some(SpaceIcon::Symbol(1))),
+                tab(12, kept, None),
+            ],
+            ..SessionState::default()
+        };
+        let restored = restore(state.clone());
+        assert_eq!(
+            restored.items.tab(ItemId::from(10)).unwrap().custom_icon,
+            Some(work.clone())
+        );
+        assert_eq!(canonicalize(state.clone()), state);
+        let json = serde_json::to_string(&state.items[2]).unwrap();
+        assert!(!json.contains("custom_icon"));
+
+        let mut hostile = state;
+        hostile.items = vec![
+            tab(13, today(space), Some(work)),
+            tab(14, kept, Some(SpaceIcon::Symbol(200))),
+            tab(15, kept, Some(SpaceIcon::Emoji("work".into()))),
+        ];
+        let restored = restore(hostile);
+        for id in [13, 14, 15] {
+            assert_eq!(
+                restored.items.tab(ItemId::from(id)).unwrap().custom_icon,
+                None
+            );
+        }
+    }
+
+    #[test]
     fn restore_drops_dangling_references() {
         let state = SessionState {
             profiles: vec![],
@@ -815,6 +888,7 @@ mod tests {
                     title: "E".into(),
                     zoom: 1.0,
                     last_active_ms: None,
+                    custom_icon: None,
                 },
             }],
             active_space: Some(SpaceId::from(2)),
@@ -875,6 +949,7 @@ mod tests {
                         title: format!("\u{202e}Example\0{}", "y".repeat(600)),
                         zoom: f64::INFINITY,
                         last_active_ms: None,
+                        custom_icon: None,
                     },
                 },
                 PersistedItem {
@@ -886,6 +961,7 @@ mod tests {
                         title: "Local file".into(),
                         zoom: 1.0,
                         last_active_ms: None,
+                        custom_icon: None,
                     },
                 },
                 PersistedItem {
@@ -897,6 +973,7 @@ mod tests {
                         title: "Private".into(),
                         zoom: 1.0,
                         last_active_ms: None,
+                        custom_icon: None,
                     },
                 },
             ],

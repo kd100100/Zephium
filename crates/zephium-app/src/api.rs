@@ -347,6 +347,12 @@ pub enum Command {
         essential: bool,
         before: Option<ItemId>,
     },
+    /// Gives an Essential a mark of the person's own in place of its site's
+    /// icon, or takes it away with `None`.
+    SetTabIcon {
+        id: ItemId,
+        icon: Option<zephium_core::spaces::SpaceIcon>,
+    },
     /// Keeps one of onboarding's catalog sites, named by its catalog id.
     KeepSite(String),
     /// Lets go of a catalog site onboarding kept, named by its catalog id.

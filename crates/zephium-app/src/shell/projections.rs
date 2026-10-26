@@ -634,6 +634,7 @@ fn tab_view(
             }
         },
         loading: tab.loading,
+        custom_icon: tab.custom_icon.as_ref().map(super::spaces::icon_view),
         page_request: tab.page_request.as_deref().map(|request| match request {
             zephium_core::item::PageRequest::ExternalApp { url, app } => {
                 zephium_ipc::PageRequestView::ExternalApp {

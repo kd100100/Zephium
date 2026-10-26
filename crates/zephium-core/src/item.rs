@@ -124,6 +124,9 @@ pub struct TabState {
     /// When the person last had this tab in front, in Unix milliseconds.
     /// Persisted, so archiving idle tabs holds across a relaunch.
     pub last_active_ms: Option<u64>,
+    /// The mark the person chose to show in place of the site's icon. Only an
+    /// Essential wears one; leaving the Essentials clears it. Persisted.
+    pub custom_icon: Option<crate::spaces::SpaceIcon>,
     /// The last navigation the person asked for that did not load. Runtime
     /// only: never persisted, and cleared by the next attempt or commit.
     pub failure: Option<Box<NavigationFailure>>,
@@ -165,6 +168,7 @@ impl TabState {
             zoom: 1.0,
             lifecycle: Lifecycle::Inactive,
             last_active_ms: None,
+            custom_icon: None,
             failure: None,
             capture: None,
             view: false,

@@ -1,6 +1,12 @@
 import { listenAll } from "$shared/lib/lifecycle";
 import { flushSync } from "svelte";
-import type { ItemsState, SpaceLookInputV1, TabMenuContext, TabView } from "$shared/ipc/bindings";
+import type {
+  ItemsState,
+  SpaceIconView,
+  SpaceLookInputV1,
+  TabMenuContext,
+  TabView,
+} from "$shared/ipc/bindings";
 import { settle } from "$domain/operations";
 import { commands } from "$shared/ipc/bindings";
 import { events } from "$shared/ipc/native-events";
@@ -169,6 +175,7 @@ function tabMenuContext(id: string): TabMenuContext {
     page: (tab?.content ?? "web") === "web" && (tab?.url ?? null) !== null,
     can_split: canSplitWith(id),
     essential: state.nodes.some((node) => tabOf(node) === id && node.section === "favorites"),
+    custom_icon: (tab?.custom_icon ?? null) !== null,
     others: open.some((candidate) => candidate !== id),
     below: at >= 0 && at < open.length - 1,
   };
@@ -182,6 +189,13 @@ export function openTabMenu(id: string, x: number, y: number) {
 /** The browser interface's own menu; `page` says a web page is in front. */
 export function openChromeMenu(x: number, y: number, page: boolean) {
   void commands.chromeMenuPopup(x, y, page, canSplitActive());
+}
+
+/** The tab the menu was opened on, handed over once to the choice made in it. */
+export function takeMenuTarget(): string | null {
+  const id = menuTarget;
+  menuTarget = null;
+  return id;
 }
 
 export function copyMenuTargetLink(): Promise<boolean> {
@@ -216,5 +230,8 @@ export const updateSpace = (id: string, name: string, look: SpaceLookInputV1) =>
 export const deleteSpace = (id: string) => settle(commands.spacesDelete(id));
 export const reorderSpace = (id: string, before: string | null) =>
   settle(commands.spacesReorder(id, before));
+/** An Essential's own icon, or `null` to show its site's icon again. */
+export const setTabIcon = (id: string, icon: SpaceIconView | null) =>
+  settle(commands.tabsSetIcon(id, icon));
 export const moveTabToSpace = (tab: string, space: string) =>
   settle(commands.spacesMoveTab(tab, space));

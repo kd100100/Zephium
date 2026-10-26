@@ -31,10 +31,7 @@ pub(crate) struct SpaceLookInputV1 {
 impl SpaceLookInputV1 {
     fn look(self) -> Option<SpaceLook> {
         let look = SpaceLook {
-            icon: self.icon.map(|icon| match icon {
-                SpaceIconView::Symbol { index } => SpaceIcon::Symbol(index),
-                SpaceIconView::Emoji { text } => SpaceIcon::Emoji(text),
-            }),
+            icon: self.icon.map(icon_of),
             color: self.color,
             theme: self.theme.map(|theme| match theme {
                 SpaceThemeView::Preset { id } => SpaceTheme::Preset(id),
@@ -42,6 +39,14 @@ impl SpaceLookInputV1 {
             }),
         };
         look.valid().then_some(look)
+    }
+}
+
+/// The icon a space or an Essential is given, as chrome names it.
+pub(crate) fn icon_of(view: SpaceIconView) -> SpaceIcon {
+    match view {
+        SpaceIconView::Symbol { index } => SpaceIcon::Symbol(index),
+        SpaceIconView::Emoji { text } => SpaceIcon::Emoji(text),
     }
 }
 

@@ -1,10 +1,8 @@
 <script lang="ts">
   import * as m from "$shared/i18n/messages";
-  import { Globe02Icon } from "@hugeicons/core-free-icons";
   import type { TabView } from "$shared/ipc/bindings";
-  import FavIcon from "$shared/ui/FavIcon";
-  import { favicons } from "$domain/favicons";
   import CaptureControl from "$shared/ui/CaptureControl";
+  import EssentialMark from "./EssentialMark.svelte";
   import { stopCaptureFor } from "$domain/capture";
 
   let {
@@ -65,14 +63,7 @@
     onpointercancel={onPointerCancel}
     onclick={() => onSelect(tab.id)}
   >
-    <FavIcon
-      image={favicons.image(tab.icon)}
-      tone={favicons.tone(tab.icon)}
-      loading={tab.loading}
-      size={18}
-      lit
-      fallback={Globe02Icon}
-    />
+    <EssentialMark {tab} size={18} />
     <span data-zephium-tab-label class="sr-only">{tab.title}</span>
   </button>
   {#if tab.capture}

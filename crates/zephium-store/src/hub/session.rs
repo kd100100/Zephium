@@ -107,6 +107,8 @@ enum BoundedKind {
         zoom: f64,
         #[serde(default)]
         last_active_ms: Option<u64>,
+        #[serde(default)]
+        custom_icon: Option<zephium_core::spaces::SpaceIcon>,
     },
     BrowserTab {
         page: zephium_core::item::BrowserOwnedTab,
@@ -210,11 +212,13 @@ impl From<BoundedSessionState> for SessionState {
                             title,
                             zoom,
                             last_active_ms,
+                            custom_icon,
                         } => PersistedKind::Tab {
                             url,
                             title,
                             zoom,
                             last_active_ms,
+                            custom_icon,
                         },
                         BoundedKind::BrowserTab { page } => PersistedKind::BrowserTab { page },
                     },
@@ -280,6 +284,7 @@ mod qa_settings_recovery_tests {
                         title: "Example".into(),
                         zoom: 1.0,
                         last_active_ms: None,
+                        custom_icon: None,
                     },
                 },
                 PersistedItem {

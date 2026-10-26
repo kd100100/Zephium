@@ -913,6 +913,65 @@ fn essential_move_preserves_the_active_native_tab_and_can_be_reversed() {
 }
 
 #[test]
+fn an_essential_shows_the_icon_it_is_given_until_it_leaves() {
+    let (mut shell, _, screen) = setup();
+    shell.handle(Command::Bootstrap);
+    let id = active_id(&screen);
+    navigate_and_commit(&mut shell, id, "mail.example");
+    let work = zephium_core::spaces::SpaceIcon::Emoji("💼".into());
+    let shown = |screen: &Screen| {
+        screen
+            .lock()
+            .unwrap()
+            .tabs
+            .iter()
+            .find(|tab| tab.id == id.to_string())
+            .and_then(|tab| tab.custom_icon.clone())
+    };
+
+    // A tab in a space shows its title, so it cannot be given one.
+    let denied = shell.handle_operation(Command::SetTabIcon {
+        id,
+        icon: Some(work.clone()),
+    });
+    assert_eq!(denied.outcome, OperationOutcome::Rejected);
+
+    shell.handle_operation(Command::SetTabEssential {
+        id,
+        essential: true,
+        before: None,
+    });
+    let set = shell.handle_operation(Command::SetTabIcon {
+        id,
+        icon: Some(work),
+    });
+    assert!(matches!(
+        set.outcome,
+        OperationOutcome::Applied | OperationOutcome::Deferred
+    ));
+    assert_eq!(
+        shown(&screen),
+        Some(zephium_ipc::SpaceIconView::Emoji {
+            text: "💼".into()
+        })
+    );
+
+    shell.handle_operation(Command::SetTabIcon { id, icon: None });
+    assert_eq!(shown(&screen), None);
+
+    shell.handle_operation(Command::SetTabIcon {
+        id,
+        icon: Some(zephium_core::spaces::SpaceIcon::Symbol(2)),
+    });
+    shell.handle_operation(Command::SetTabEssential {
+        id,
+        essential: false,
+        before: None,
+    });
+    assert_eq!(shown(&screen), None);
+}
+
+#[test]
 fn essential_move_rejects_foreign_and_invalid_drop_targets() {
     let (mut shell, _, screen) = setup();
     shell.handle(Command::Bootstrap);
@@ -1266,6 +1325,7 @@ fn keyboard_selection_walks_the_sidebar_from_favorites_through_pinned_folders() 
         title: host.into(),
         zoom: 1.0,
         last_active_ms: None,
+        custom_icon: None,
     };
     let pinned = Placement::Space {
         space,

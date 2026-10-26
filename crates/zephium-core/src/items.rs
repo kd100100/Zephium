@@ -264,8 +264,35 @@ impl Items {
         if let Some(item) = self.items.get_mut(&id) {
             item.parent = None;
             item.placement = placement;
+            if !matches!(placement, Placement::Favorites { .. }) {
+                if let ItemKind::Tab(tab) = &mut item.kind {
+                    tab.custom_icon = None;
+                }
+            }
         }
         true
+    }
+
+    /// Gives an Essential the mark it shows in place of its site's icon, or
+    /// takes it away. Only a top-level web tab in the Essentials wears one.
+    /// Returns whether the tab now wears `icon`.
+    pub fn set_custom_icon(&mut self, id: ItemId, icon: Option<crate::spaces::SpaceIcon>) -> bool {
+        if icon.as_ref().is_some_and(|icon| !icon.valid()) {
+            return false;
+        }
+        let Some(item) = self.items.get_mut(&id) else {
+            return false;
+        };
+        if item.parent.is_some() || !matches!(item.placement, Placement::Favorites { .. }) {
+            return false;
+        }
+        match &mut item.kind {
+            ItemKind::Tab(tab) if tab.content == TabContent::Web => {
+                tab.custom_icon = icon;
+                true
+            }
+            _ => false,
+        }
     }
 
     pub fn remove(&mut self, id: ItemId) -> Vec<Effect> {
@@ -902,6 +929,41 @@ mod tests {
             items.pending_navigation(id(1)),
             Some(NavigationRequestId(2))
         );
+    }
+
+    #[test]
+    fn only_an_essential_wears_an_icon_of_its_own_and_leaving_takes_it_off() {
+        use crate::spaces::SpaceIcon;
+        let mut items = Items::default();
+        let kept = Placement::Favorites {
+            profile: ProfileId::from(1),
+        };
+        let url = Url::parse("https://mail.google.com/mail/u/1/").unwrap();
+        assert!(items.insert_unloaded_tab(id(1), kept, url.clone(), "Inbox"));
+        assert!(items.insert_unloaded_tab(id(2), today(), url, "Inbox"));
+        let work = SpaceIcon::Emoji("💼".into());
+
+        assert!(items.set_custom_icon(id(1), Some(work.clone())));
+        assert_eq!(items.tab(id(1)).unwrap().custom_icon, Some(work.clone()));
+        // A tab in a space shows its title, so it keeps the site's icon.
+        assert!(!items.set_custom_icon(id(2), Some(work.clone())));
+        assert_eq!(items.tab(id(2)).unwrap().custom_icon, None);
+        // Only a mark a space could wear is accepted.
+        assert!(!items.set_custom_icon(id(1), Some(SpaceIcon::Symbol(200))));
+        assert!(!items.set_custom_icon(id(1), Some(SpaceIcon::Emoji("work".into()))));
+        assert_eq!(items.tab(id(1)).unwrap().custom_icon, Some(work.clone()));
+
+        // Reordering among the Essentials keeps it; leaving them does not.
+        assert!(items.move_tab_to_root(id(1), kept, None));
+        assert_eq!(items.tab(id(1)).unwrap().custom_icon, Some(work));
+        assert!(items.move_tab_to_root(id(1), today(), None));
+        assert_eq!(items.tab(id(1)).unwrap().custom_icon, None);
+        assert!(items.move_tab_to_root(id(1), kept, None));
+        assert_eq!(items.tab(id(1)).unwrap().custom_icon, None);
+
+        assert!(items.set_custom_icon(id(1), Some(SpaceIcon::Symbol(3))));
+        assert!(items.set_custom_icon(id(1), None));
+        assert_eq!(items.tab(id(1)).unwrap().custom_icon, None);
     }
 
     #[test]

@@ -5,13 +5,12 @@
   import * as tabDrag from "$session/tab-drag.svelte";
   import { RowDrag } from "$session/row-drag.svelte";
   import DragMark from "$shared/ui/DragMark";
-  import { Globe02Icon } from "@hugeicons/core-free-icons";
   import { tabs } from "$domain/tabs";
   import type { TabView } from "$shared/ipc/bindings";
-  import FavIcon from "$shared/ui/FavIcon";
   import CaptureControl from "$shared/ui/CaptureControl";
-  import { stopCaptureFor } from "$domain/capture";
+  import EssentialMark from "./EssentialMark.svelte";
   import { favicons } from "$domain/favicons";
+  import { stopCaptureFor } from "$domain/capture";
 
   let {
     entries,
@@ -85,14 +84,7 @@
         onpointercancel={(event) => drag.cancel(event)}
         onclick={() => !drag.swallowClick() && onSelect(tab.id)}
       >
-        <FavIcon
-          image={favicons.image(tab.icon)}
-          tone={favicons.tone(tab.icon)}
-          loading={tab.loading}
-          size={16}
-          lit
-          fallback={Globe02Icon}
-        />
+        <EssentialMark {tab} size={16} />
         <span data-zephium-tab-label class="sr-only">{tab.title}</span>
       </button>
       {#if tab.capture}

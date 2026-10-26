@@ -76,6 +76,11 @@ export const architecture = {
             from: { element: { type: "features", captured: { module: "assist" } } },
             allow: { to: { element: { type: "features", captured: { module: "work" } } } },
           },
+          // Essentials wear the marks Spaces are given, picked with the same control.
+          {
+            from: { element: { type: "features", captured: { module: "essentials" } } },
+            allow: { to: { element: { type: "features", captured: { module: "tabs" } } } },
+          },
           {
             from: { element: { type: "features", captured: { module: "library" } } },
             allow: { to: { element: { type: "features", captured: { module: "downloads" } } } },

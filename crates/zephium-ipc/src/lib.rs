@@ -42,6 +42,10 @@ pub struct TabView {
     pub can_go_back: bool,
     pub can_go_forward: bool,
     pub icon: Option<IconRef>,
+    /// The mark the person gave an Essential, shown in place of `icon`.
+    #[serde(default)]
+    #[specta(optional)]
+    pub custom_icon: Option<SpaceIconView>,
     #[serde(default)]
     #[specta(optional)]
     pub capture: Option<MediaCaptureView>,

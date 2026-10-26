@@ -1711,6 +1711,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             tabs_open,
             tabs_activate,
             tabs_close,
+            tabs_set_icon,
             tabs_set_essential,
             essentials_keep,
             essentials_release,
@@ -2774,6 +2775,29 @@ fn tabs_close(
     dispatch_with_id(caller.app_handle(), &shell, &id, Command::Close)
 }
 
+/// Gives an Essential a mark of its own in place of its site's icon, or takes
+/// it away with `None`. The shell refuses any tab that is not an Essential.
+#[tauri::command]
+#[specta::specta]
+fn tabs_set_icon(
+    caller: WebviewWindow,
+    shell: State<'_, Handle>,
+    id: String,
+    icon: Option<zephium_ipc::SpaceIconView>,
+) -> zephium_ipc::OperationAdmission {
+    if !authorize(&caller, CallerPolicy::Main, "tabs_set_icon") {
+        return rejected_operation();
+    }
+    let icon = icon.map(spaces::icon_of);
+    if icon.as_ref().is_some_and(|icon| !icon.valid()) {
+        return rejected_operation();
+    }
+    dispatch_with_id(caller.app_handle(), &shell, &id, |id| Command::SetTabIcon {
+        id,
+        icon,
+    })
+}
+
 #[tauri::command]
 #[specta::specta]
 fn tabs_set_essential(
@@ -3653,6 +3677,14 @@ fn execute_tab_menu_action(
             rejected_operation()
         };
     }
+    if action == "changeIcon" {
+        // The picker is chrome's; the choice comes back through tabs_set_icon.
+        return if try_emit_to_privileged(app, MAIN_LABEL, EVENT_UI, &TAB_MENU_CHANGE_ICON_COMMAND) {
+            accepted_ui_operation()
+        } else {
+            rejected_operation()
+        };
+    }
     let Some(shell) = app.try_state::<Handle>() else {
         return rejected_operation();
     };
@@ -3671,6 +3703,7 @@ fn execute_tab_menu_action(
         "closeBelow" => dispatch_operation(app, &shell, tab_action(TabAction::CloseBelow)),
         "keep" => dispatch_operation(app, &shell, keep(true)),
         "unkeep" => dispatch_operation(app, &shell, keep(false)),
+        "resetIcon" => dispatch_operation(app, &shell, Command::SetTabIcon { id, icon: None }),
         "split" => dispatch_operation(
             app,
             &shell,
@@ -5359,6 +5392,7 @@ fn build_add_menu(
 /// Delivered to privileged chrome, which holds the authoritative URL for the
 /// armed tab. Native code never handles page-derived text for the clipboard.
 const TAB_MENU_COPY_LINK_COMMAND: &str = "tab.copyLink";
+const TAB_MENU_CHANGE_ICON_COMMAND: &str = "tab.changeIcon";
 
 /// Registry command delivered to the frame, which owns sidebar presentation.
 const SIDEBAR_COMPACT_COMMAND: &str = "sidebar.toggleCompact";
@@ -5387,7 +5421,7 @@ const BOOKMARK_MENU_ACTION_IDS: [&str; 6] = [
     "bookmarkmenu.removeFolder",
 ];
 
-const TAB_MENU_ACTION_IDS: [&str; 10] = [
+const TAB_MENU_ACTION_IDS: [&str; 12] = [
     "tabmenu.reload",
     "tabmenu.duplicate",
     "tabmenu.copyLink",
@@ -5398,6 +5432,8 @@ const TAB_MENU_ACTION_IDS: [&str; 10] = [
     "tabmenu.close",
     "tabmenu.closeOthers",
     "tabmenu.closeBelow",
+    "tabmenu.changeIcon",
+    "tabmenu.resetIcon",
 ];
 
 /// What the tab menu can offer for the tab it opens on, as the sidebar sees
@@ -5408,6 +5444,8 @@ struct TabMenuContext {
     page: bool,
     can_split: bool,
     essential: bool,
+    /// The Essential wears an icon the person chose.
+    custom_icon: bool,
     /// Other open tabs exist to close.
     others: bool,
     /// Open tabs follow this one.
@@ -5568,6 +5606,17 @@ fn build_tab_menu(
     } else {
         item(4, "Add to Essentials", context.page)?
     };
+    // Only an Essential shows nothing but its icon, so only it can change it.
+    let change_icon = if context.essential {
+        Some(item(10, "Change Icon…", context.page)?)
+    } else {
+        None
+    };
+    let reset_icon = if context.essential && context.custom_icon {
+        Some(item(11, "Reset Icon", true)?)
+    } else {
+        None
+    };
     let split = item(6, "Open in Split View", context.can_split)?;
     let second = PredefinedMenuItem::separator(handle)?;
     let close = item(7, "Close Tab", true)?;
@@ -5579,9 +5628,15 @@ fn build_tab_menu(
     } else {
         spaces::tab_menu_section(handle, &format!("tabmenu.{}", spaces::TAB_MENU_MOVE))?
     };
-    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![
-        &reload, &duplicate, &copy_link, &bookmark, &first, &keep, &split,
-    ];
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> =
+        vec![&reload, &duplicate, &copy_link, &bookmark, &first, &keep];
+    if let Some(change_icon) = &change_icon {
+        items.push(change_icon);
+    }
+    if let Some(reset_icon) = &reset_icon {
+        items.push(reset_icon);
+    }
+    items.push(&split);
     if let Some(move_to) = &move_to {
         items.push(move_to);
     }
@@ -7306,7 +7361,9 @@ mod tests {
                 "tabmenu.split",
                 "tabmenu.close",
                 "tabmenu.closeOthers",
-                "tabmenu.closeBelow"
+                "tabmenu.closeBelow",
+                "tabmenu.changeIcon",
+                "tabmenu.resetIcon"
             ]
         );
         // Context-menu actions carry their own target and must never collide

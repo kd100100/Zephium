@@ -18,6 +18,7 @@
   import { DownloadPulse, DownloadStatus } from "$features/downloads";
   import { UpdateNotice } from "$features/updates";
   import { EssentialsRail } from "$features/essentials";
+  import { EssentialIconPanel, pickEssentialIcon } from "$features/essentials";
   import { ExtensionActions, ManageExtensions } from "$features/extensions";
   import { loadWebExtensionManager, StoreInstallRail } from "$features/webext";
   import { sidebarTree } from "$features/tabs";
@@ -219,6 +220,10 @@
     untrack(() => {
       if (command.id === "split.choose") splitting = true;
       if (command.id === "tab.copyLink") void tabs.copyMenuTargetLink().then(linkCopied);
+      if (command.id === "tab.changeIcon") {
+        const target = tabs.takeMenuTarget();
+        if (target !== null) pickEssentialIcon(target);
+      }
       if (command.id === "page.copyLink") void tabs.copyActiveLink().then(linkCopied);
       if (command.id === "find.show") findInPage.show(tabs.activeId());
       if (command.id === "find.next") findInPage.step(true, tabs.activeId());
@@ -421,6 +426,7 @@
             {#if tabDrag.moveFailed()}<p class="sidebar-move-error" role="alert">
                 {m.essential_move_failed()}
               </p>{/if}
+            <EssentialIconPanel />
           {/snippet}
         </Dock>{/if}{/snippet}{#snippet settingsNavigation()}<SettingsNavigation
       />{/snippet}{#snippet toolPanel(kind)}<LazyView
