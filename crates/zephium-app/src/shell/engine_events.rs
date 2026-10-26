@@ -366,6 +366,7 @@ impl Shell {
                 adoption,
             } => self.adopt_linked_native_tab(id, child, foreground, adoption),
             EngineEvent::NativeTabCloseRequested { id } => self.close_owned_native_tab(id),
+            EngineEvent::MediaReturnRequested { id } => self.return_to_media(id),
             EngineEvent::PageOpenBlocked { id, url } => {
                 let url = url
                     .and_then(|url| url::Url::parse(&url).ok())
@@ -671,6 +672,7 @@ impl Shell {
             | EngineEvent::DiscardSafety { id, .. }
             | EngineEvent::NavState { id, .. }
             | EngineEvent::NativeTabCloseRequested { id }
+            | EngineEvent::MediaReturnRequested { id }
             | EngineEvent::PageOpenBlocked { id, .. }
             | EngineEvent::ExternalAppRequested { id, .. }
             | EngineEvent::FocusBlocked { id, .. }

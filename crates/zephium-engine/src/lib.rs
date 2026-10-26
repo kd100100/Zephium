@@ -1130,6 +1130,7 @@ impl RetirementGate {
             | event @ EngineEvent::DiscardSafety { id, .. }
             | event @ EngineEvent::NavState { id, .. }
             | event @ EngineEvent::NativeTabCloseRequested { id }
+            | event @ EngineEvent::MediaReturnRequested { id }
             | event @ EngineEvent::PageOpenBlocked { id, .. }
             | event @ EngineEvent::ExternalAppRequested { id, .. }
             | event @ EngineEvent::FocusBlocked { id, .. }

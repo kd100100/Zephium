@@ -266,6 +266,23 @@ impl Shell {
         self.switch_space(space)
     }
 
+    /// Shows the space that holds `tab`, a tab of the focused profile, with
+    /// that tab in front rather than the one the space was left at.
+    pub(super) fn switch_to_space_of(&mut self, tab: ItemId) -> OperationDisposition {
+        let Some((profile, _)) = self.space_scope() else {
+            return rejected(OperationReason::InvalidScope);
+        };
+        let Some(Placement::Space { space, .. }) = self.items.get(tab).map(|item| item.placement)
+        else {
+            return rejected(OperationReason::InvalidScope);
+        };
+        if !self.item_in_scope(tab, profile, space) {
+            return rejected(OperationReason::InvalidScope);
+        }
+        self.space_memory.left_at.insert(space, tab);
+        self.switch_space(space)
+    }
+
     /// Shows `space` in the focused window. Work stays on its canvas, which
     /// follows the space, and any other browser page steps back to browsing first.
     fn switch_space(&mut self, space: SpaceId) -> OperationDisposition {

@@ -1930,6 +1930,8 @@ pub(crate) struct PlatformSpecificWebViewAttributes {
   #[cfg(target_os = "macos")]
   native_download_handler: Option<Box<dyn Fn(&objc2_web_kit::WKDownload)>>,
   #[cfg(target_os = "macos")]
+  media_return_handler: Option<Box<dyn Fn()>>,
+  #[cfg(target_os = "macos")]
   context_menu_handler: Option<
     Box<
       dyn Fn(
@@ -1961,6 +1963,8 @@ impl Default for PlatformSpecificWebViewAttributes {
       file_upload_handler: None,
       #[cfg(target_os = "macos")]
       native_download_handler: None,
+      #[cfg(target_os = "macos")]
+      media_return_handler: None,
       #[cfg(target_os = "macos")]
       context_menu_handler: None,
     }
@@ -2051,6 +2055,10 @@ pub trait WebViewBuilderExtMacos {
     self,
     handler: impl Fn(&objc2_web_kit::WKWebView, FileUploadRequest, FileUploadResponder) + 'static,
   ) -> Self;
+  /// Called when a video presented outside the page, such as in picture in
+  /// picture, asks to return to it. WebKit puts the video back only once the
+  /// page is visible again, so the embedder should bring the page on screen.
+  fn with_media_return_handler(self, handler: impl Fn() + 'static) -> Self;
   /// Merges browser-owned items into the native page context menu without
   /// serializing page metadata through Rust. The callback receives WebKit's
   /// already-created default menu and may replace or suppress it.
@@ -2099,6 +2107,11 @@ impl WebViewBuilderExtMacos for WebViewBuilder<'_> {
     handler: impl Fn(&objc2_web_kit::WKWebView, FileUploadRequest, FileUploadResponder) + 'static,
   ) -> Self {
     self.platform_specific.file_upload_handler = Some(Box::new(handler));
+    self
+  }
+
+  fn with_media_return_handler(mut self, handler: impl Fn() + 'static) -> Self {
+    self.platform_specific.media_return_handler = Some(Box::new(handler));
     self
   }
 

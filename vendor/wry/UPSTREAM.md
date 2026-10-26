@@ -240,3 +240,13 @@ On Windows the same handler is fed from `NavigationCompleted`'s
 `ContentLoading` of WebView2's built-in error page is hidden like a commit but
 not reported as one, so the failure lands on the document the person asked for
 and the host can show its own explanation.
+
+### Returning media to its page (macOS)
+
+`with_media_return_handler` answers the private `WKUIDelegatePrivate` selector
+`_webViewFullscreenMayReturnToInline:`. The picture-in-picture window's return
+button sends it, and WebKit then waits for the page to become visible before
+it takes the video back, so without a handler that brings the page on screen
+the button does nothing for a background tab. A missing handler keeps
+upstream's no-op; a panic is contained. Like the other private selectors it
+must be reviewed during upstream rebases.

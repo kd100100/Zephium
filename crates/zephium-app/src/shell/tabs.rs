@@ -216,6 +216,20 @@ impl Shell {
         self.items.ensure_view(id)
     }
 
+    /// A video in picture in picture asked to go back to its page. Its tab
+    /// comes to the front, from another space if need be, and so does the
+    /// window, as the picture-in-picture return button does in Safari.
+    pub(super) fn return_to_media(&mut self, id: ItemId) {
+        let disposition = if self.item_in_focused_scope(id) {
+            self.operation_activate(id)
+        } else {
+            self.switch_to_space_of(id)
+        };
+        if disposition.outcome != OperationOutcome::Rejected {
+            (self.emit)(Projection::RaiseWindow);
+        }
+    }
+
     pub(super) fn close(&mut self, id: ItemId) -> NativeWork {
         if !self.item_in_focused_scope(id) {
             return NativeWork::default();
