@@ -1,7 +1,7 @@
 //! Native video PiP in a dedicated content world, scoped to an ordinary tab.
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_foundation::{MainThreadMarker, NSError, NSString};
+use objc2_foundation::{MainThreadMarker, NSError, NSNumber, NSString};
 use objc2_web_kit::WKContentWorld;
 use std::cell::{Cell, OnceCell};
 use std::rc::Rc;
@@ -27,13 +27,24 @@ fn world(mtm: MainThreadMarker) -> Retained<WKContentWorld> {
     })
 }
 
+// Answers whether the document has left element fullscreen. Only a change
+// that leaves fullscreen ends the wait early; the timeout answers too, with
+// whatever the document says then.
 const DOCUMENT_LEFT_FULLSCREEN: &str =
-    "if (document.fullscreenElement || document.webkitFullscreenElement) \
-     await new Promise(resolve => { \
-       document.addEventListener('fullscreenchange', resolve, { once: true }); \
-       document.addEventListener('webkitfullscreenchange', resolve, { once: true }); \
-       setTimeout(resolve, 1000); \
-     });";
+    "const fullscreen = () => !!(document.fullscreenElement || document.webkitFullscreenElement); \
+     if (fullscreen()) await new Promise(resolve => { \
+       const done = () => { \
+         document.removeEventListener('fullscreenchange', changed); \
+         document.removeEventListener('webkitfullscreenchange', changed); \
+         clearTimeout(timer); \
+         resolve(); \
+       }; \
+       const changed = () => { if (!fullscreen()) done(); }; \
+       const timer = setTimeout(done, 1000); \
+       document.addEventListener('fullscreenchange', changed); \
+       document.addEventListener('webkitfullscreenchange', changed); \
+     }); \
+     return !fullscreen();";
 
 pub(crate) fn automatic_pip(view: &wry::WebView, script: String, current: Rc<dyn Fn() -> bool>) {
     let Some(mtm) = MainThreadMarker::new() else {
@@ -55,17 +66,23 @@ pub(crate) fn automatic_pip(view: &wry::WebView, script: String, current: Rc<dyn
     }
 }
 
-/// Calls `done` once the page's document has left element fullscreen, or
-/// after a second if it does not say so.
+/// Calls `done` once the page's document has left element fullscreen. A page
+/// still fullscreen after a second, or one the probe could not ask, is left
+/// alone: it would decline the video anyway.
 pub(crate) fn after_document_fullscreen(view: &wry::WebView, done: impl FnOnce() + 'static) {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
     let page = super::native_webview(view);
     let done = Cell::new(Some(done));
-    let completion = block2::RcBlock::new(move |_: *mut AnyObject, _: *mut NSError| {
-        if let Some(done) = done.take() {
-            done();
+    let completion = block2::RcBlock::new(move |result: *mut AnyObject, error: *mut NSError| {
+        // SAFETY: WebKit passes either null or a live object for the duration
+        // of the completion.
+        let (result, error) = unsafe { (result.as_ref(), error.as_ref()) };
+        if document_left(result, error) {
+            if let Some(done) = done.take() {
+                done();
+            }
         }
     });
     let world = world(mtm);
@@ -79,5 +96,32 @@ pub(crate) fn after_document_fullscreen(view: &wry::WebView, done: impl FnOnce()
             &world,
             Some(&completion),
         );
+    }
+}
+
+/// Whether the probe saw the document out of fullscreen. A failed script or
+/// any answer other than `true` counts as still fullscreen.
+fn document_left(result: Option<&AnyObject>, error: Option<&NSError>) -> bool {
+    error.is_none()
+        && result
+            .and_then(|result| result.downcast_ref::<NSNumber>())
+            .is_some_and(|left| left.as_bool())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use objc2_foundation::ns_string;
+
+    #[test]
+    fn only_a_document_out_of_fullscreen_lets_the_video_be_offered() {
+        let left = NSNumber::new_bool(true);
+        let still_fullscreen = NSNumber::new_bool(false);
+        assert!(document_left(Some(&left), None));
+        assert!(!document_left(Some(&still_fullscreen), None));
+        assert!(!document_left(None, None));
+        assert!(!document_left(Some(ns_string!("true")), None));
+        let failed = NSError::new(1, ns_string!("WKErrorDomain"));
+        assert!(!document_left(Some(&left), Some(&failed)));
     }
 }
