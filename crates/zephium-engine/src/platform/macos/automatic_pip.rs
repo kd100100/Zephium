@@ -15,6 +15,8 @@ fn world(mtm: MainThreadMarker) -> Retained<WKContentWorld> {
     }
     WORLD.with(|world| {
         world
+            // SAFETY: `mtm` proves main-thread creation and the name is a live
+            // retained NSString.
             .get_or_init(|| unsafe {
                 WKContentWorld::worldWithName(
                     &NSString::from_str("zephium-automatic-video-pip"),
@@ -66,8 +68,10 @@ pub(crate) fn after_document_fullscreen(view: &wry::WebView, done: impl FnOnce()
             done();
         }
     });
+    let world = world(mtm);
+    // SAFETY: main-thread WebKit call with a retained view and world; WebKit
+    // copies the completion block.
     unsafe {
-        let world = world(mtm);
         page.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
             &NSString::from_str(DOCUMENT_LEFT_FULLSCREEN),
             None,
